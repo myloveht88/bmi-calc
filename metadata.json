@@ -1,0 +1,5 @@
+{
+  "name": "BMI健康计算器",
+  "description": "一款现代的、交互式的BMI计算器，支持公制和英制单位，具有可视化健康指标和个性化反馈。",
+  "requestFramePermissions": []
+}
