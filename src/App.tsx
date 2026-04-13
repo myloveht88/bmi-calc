@@ -170,7 +170,7 @@ export default function App() {
   const energyBalance = dailyIntake - totalExpenditure;
   
   // Predict monthly weight change (7700 kcal ≈ 1kg fat)
-  const monthlyWeightChange = parseFloat(((energyBalance * 30) / 7700).toFixed(2));
+  const monthlyWeightChange = parseFloat(((energyBalance || 0) * 30 / 7700).toFixed(2));
 
   // Body Composition Estimates (Approximate)
   const bodyComposition = useMemo(() => {
@@ -179,25 +179,31 @@ export default function App() {
     // Deurenberg formula for Body Fat %
     const bfp = (1.20 * bmiResult.bmi) + (0.23 * age) - (10.8 * (gender === 'male' ? 1 : 0)) - 5.4;
     
+    // Use correct weight for calculations
+    let w = weight;
+    if (unitSystem === 'imperial') {
+      w = weightLbs * 0.453592;
+    }
+
     // Simple estimations
     const waterPercent = gender === 'male' ? 0.60 : 0.55;
-    const water = weight * waterPercent;
-    const boneMass = gender === 'male' ? weight * 0.045 : weight * 0.035;
+    const water = w * waterPercent;
+    const boneMass = gender === 'male' ? w * 0.045 : w * 0.035;
     
     // Muscle mass estimation (approximate skeletal muscle mass)
-    const muscleMass = weight * (1 - (bfp / 100)) * 0.57;
+    const muscleMass = w * (1 - (bfp / 100)) * 0.57;
     
     // Visceral fat level estimation (rough level 1-30)
     const visceralLevel = Math.max(1, Math.round((bmiResult.bmi * 0.4) + (age * 0.05) - (gender === 'male' ? 2 : 5)));
     
     return {
-      fat: Math.max(Math.min(bfp, 50), 5).toFixed(1),
-      water: water.toFixed(1),
-      bone: boneMass.toFixed(1),
-      muscle: muscleMass.toFixed(1),
+      fat: (Math.max(Math.min(bfp, 50), 5) || 0).toFixed(1),
+      water: (water || 0).toFixed(1),
+      bone: (boneMass || 0).toFixed(1),
+      muscle: (muscleMass || 0).toFixed(1),
       visceral: visceralLevel
     };
-  }, [bmiResult, age, gender, weight]);
+  }, [bmiResult, age, gender, weight, weightLbs, unitSystem]);
 
   const projectionData = useMemo(() => {
     if (!projectionType) return [];
@@ -224,13 +230,30 @@ export default function App() {
       data.push({
         label: projectionType === 'weekly' ? `第 ${i} 周` : `第 ${i} 个月`,
         date: date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }),
-        weight: unitSystem === 'metric' ? projectedW.toFixed(1) : (projectedW / 0.453592).toFixed(1),
-        bmi: projectedBMI.toFixed(1),
-        change: weightChange.toFixed(1)
+        weight: unitSystem === 'metric' ? (projectedW || 0).toFixed(1) : ((projectedW / 0.453592) || 0).toFixed(1),
+        bmi: (projectedBMI || 0).toFixed(1),
+        change: (weightChange || 0).toFixed(1)
       });
     }
     return data;
   }, [projectionType, energyBalance, weight, weightLbs, height, heightFt, heightIn, unitSystem]);
+
+  const handleGenderChange = (newGender: Gender) => {
+    setGender(newGender);
+    if (newGender === 'male') {
+      setHeight(170);
+      setWeight(70);
+      setWeightLbs(154.3);
+      setHeightFt(5);
+      setHeightIn(6.9);
+    } else {
+      setHeight(160);
+      setWeight(50);
+      setWeightLbs(110.2);
+      setHeightFt(5);
+      setHeightIn(3.0);
+    }
+  };
 
   const reset = () => {
     setWeight(70);
@@ -305,7 +328,7 @@ export default function App() {
                         <Label className="text-sm font-medium text-neutral-700">性别</Label>
                         <div className="flex p-1 bg-neutral-100 rounded-lg">
                           <button
-                            onClick={() => setGender('male')}
+                            onClick={() => handleGenderChange('male')}
                             className={cn(
                               "flex-1 flex items-center justify-center gap-2 py-1.5 text-sm font-medium rounded-md transition-all",
                               gender === 'male' ? "bg-white text-emerald-600 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
@@ -314,7 +337,7 @@ export default function App() {
                             <User className="w-4 h-4" /> 男
                           </button>
                           <button
-                            onClick={() => setGender('female')}
+                            onClick={() => handleGenderChange('female')}
                             className={cn(
                               "flex-1 flex items-center justify-center gap-2 py-1.5 text-sm font-medium rounded-md transition-all",
                               gender === 'female' ? "bg-white text-emerald-600 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
@@ -329,8 +352,8 @@ export default function App() {
                         <Input
                           id="age"
                           type="number"
-                          value={age}
-                          onChange={(e) => setAge(Number(e.target.value))}
+                          value={age ?? ""}
+                          onChange={(e) => setAge(e.target.value === "" ? 0 : Number(e.target.value))}
                           className="bg-neutral-50 border-neutral-200 focus:ring-emerald-500"
                         />
                       </div>
@@ -350,21 +373,26 @@ export default function App() {
                             <div className="space-y-4">
                               <div className="flex justify-between items-end">
                                 <Label htmlFor="height-metric" className="text-sm font-medium text-neutral-700">身高 (cm)</Label>
-                                <span className="text-2xl font-mono font-bold text-emerald-600">{height}</span>
+                                <span className="text-2xl font-mono font-bold text-emerald-600">{(height || 0).toFixed(1)}</span>
                               </div>
                               <Slider
-                                value={[height]}
+                                value={[Number(height) || 100]}
                                 min={100}
                                 max={250}
-                                step={1}
-                                onValueChange={(v) => setHeight(v[0])}
+                                step={0.1}
+                                onValueChange={(v) => {
+                                  if (Array.isArray(v) && v.length > 0) {
+                                    setHeight(Math.round(v[0] * 10) / 10);
+                                  }
+                                }}
                                 className="py-4"
                               />
                               <Input
                                 id="height-metric"
                                 type="number"
-                                value={height}
-                                onChange={(e) => setHeight(Number(e.target.value))}
+                                step="0.1"
+                                value={height ?? ""}
+                                onChange={(e) => setHeight(e.target.value === "" ? 0 : Number(e.target.value))}
                                 className="bg-neutral-50 border-neutral-200 focus:ring-emerald-500"
                               />
                             </div>
@@ -372,21 +400,26 @@ export default function App() {
                             <div className="space-y-4">
                               <div className="flex justify-between items-end">
                                 <Label htmlFor="weight-metric" className="text-sm font-medium text-neutral-700">体重 (kg)</Label>
-                                <span className="text-2xl font-mono font-bold text-emerald-600">{weight}</span>
+                                <span className="text-2xl font-mono font-bold text-emerald-600">{(weight || 0).toFixed(1)}</span>
                               </div>
                               <Slider
-                                value={[weight]}
+                                value={[Number(weight) || 30]}
                                 min={30}
                                 max={200}
-                                step={0.5}
-                                onValueChange={(v) => setWeight(v[0])}
+                                step={0.1}
+                                onValueChange={(v) => {
+                                  if (Array.isArray(v) && v.length > 0) {
+                                    setWeight(Math.round(v[0] * 10) / 10);
+                                  }
+                                }}
                                 className="py-4"
                               />
                               <Input
                                 id="weight-metric"
                                 type="number"
-                                value={weight}
-                                onChange={(e) => setWeight(Number(e.target.value))}
+                                step="0.1"
+                                value={weight ?? ""}
+                                onChange={(e) => setWeight(e.target.value === "" ? 0 : Number(e.target.value))}
                                 className="bg-neutral-50 border-neutral-200 focus:ring-emerald-500"
                               />
                             </div>
@@ -399,8 +432,9 @@ export default function App() {
                                 <Input
                                   id="height-ft"
                                   type="number"
-                                  value={heightFt}
-                                  onChange={(e) => setHeightFt(Number(e.target.value))}
+                                  step="0.1"
+                                  value={heightFt ?? ""}
+                                  onChange={(e) => setHeightFt(e.target.value === "" ? 0 : Number(e.target.value))}
                                   className="bg-neutral-50 border-neutral-200"
                                 />
                               </div>
@@ -409,8 +443,9 @@ export default function App() {
                                 <Input
                                   id="height-in"
                                   type="number"
-                                  value={heightIn}
-                                  onChange={(e) => setHeightIn(Number(e.target.value))}
+                                  step="0.1"
+                                  value={heightIn ?? ""}
+                                  onChange={(e) => setHeightIn(e.target.value === "" ? 0 : Number(e.target.value))}
                                   className="bg-neutral-50 border-neutral-200"
                                 />
                               </div>
@@ -419,21 +454,26 @@ export default function App() {
                             <div className="space-y-4">
                               <div className="flex justify-between items-end">
                                 <Label htmlFor="weight-lbs" className="text-sm font-medium text-neutral-700">体重 (磅)</Label>
-                                <span className="text-2xl font-mono font-bold text-emerald-600">{weightLbs}</span>
+                                <span className="text-2xl font-mono font-bold text-emerald-600">{(weightLbs || 0).toFixed(1)}</span>
                               </div>
                               <Slider
-                                value={[weightLbs]}
+                                value={[Number(weightLbs) || 60]}
                                 min={60}
                                 max={450}
-                                step={1}
-                                onValueChange={(v) => setWeightLbs(v[0])}
+                                step={0.1}
+                                onValueChange={(v) => {
+                                  if (Array.isArray(v) && v.length > 0) {
+                                    setWeightLbs(Math.round(v[0] * 10) / 10);
+                                  }
+                                }}
                                 className="py-4"
                               />
                               <Input
                                 id="weight-lbs"
                                 type="number"
-                                value={weightLbs}
-                                onChange={(e) => setWeightLbs(Number(e.target.value))}
+                                step="0.1"
+                                value={weightLbs ?? ""}
+                                onChange={(e) => setWeightLbs(e.target.value === "" ? 0 : Number(e.target.value))}
                                 className="bg-neutral-50 border-neutral-200 focus:ring-emerald-500"
                               />
                             </div>
@@ -499,18 +539,20 @@ export default function App() {
                       <Input
                         id="intake"
                         type="number"
-                        value={dailyIntake}
-                        onChange={(e) => setDailyIntake(Number(e.target.value))}
+                        value={dailyIntake ?? ""}
+                        onChange={(e) => setDailyIntake(e.target.value === "" ? 0 : Number(e.target.value))}
                         className="w-24 h-8 text-right font-mono font-bold text-emerald-600"
                       />
                     </div>
                   </div>
                   <Slider
-                    value={[dailyIntake]}
+                    value={[Number(dailyIntake) || 500]}
                     min={500}
                     max={5000}
                     step={10}
-                    onValueChange={(v) => setDailyIntake(v[0])}
+                    onValueChange={(v) => {
+                      if (Array.isArray(v) && v.length > 0) setDailyIntake(v[0]);
+                    }}
                   />
                 </div>
 
@@ -523,18 +565,20 @@ export default function App() {
                       <Input
                         id="expenditure"
                         type="number"
-                        value={extraExpenditure}
-                        onChange={(e) => setExtraExpenditure(Number(e.target.value))}
+                        value={extraExpenditure ?? ""}
+                        onChange={(e) => setExtraExpenditure(e.target.value === "" ? 0 : Number(e.target.value))}
                         className="w-24 h-8 text-right font-mono font-bold text-orange-600"
                       />
                     </div>
                   </div>
                   <Slider
-                    value={[extraExpenditure]}
+                    value={[Number(extraExpenditure) || 0]}
                     min={0}
                     max={2000}
                     step={10}
-                    onValueChange={(v) => setExtraExpenditure(v[0])}
+                    onValueChange={(v) => {
+                      if (Array.isArray(v) && v.length > 0) setExtraExpenditure(v[0]);
+                    }}
                   />
                 </div>
                 
@@ -747,7 +791,7 @@ export default function App() {
                               <Calendar className="w-3 h-3 text-neutral-300 group-hover:text-emerald-400" />
                             </div>
                             <div className={cn("text-xl font-bold", energyBalance > 0 ? "text-rose-500" : "text-emerald-500")}>
-                              {energyBalance > 0 ? '+' : ''}{((energyBalance * 7) / 7700).toFixed(2)} kg
+                              {energyBalance > 0 ? '+' : ''}{(((energyBalance || 0) * 7) / 7700).toFixed(2)} kg
                             </div>
                             <div className="text-[9px] text-neutral-400 mt-1">点击查看详情</div>
                           </button>
