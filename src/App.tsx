@@ -55,7 +55,7 @@ export default function App() {
   const [dailyIntake, setDailyIntake] = useState<number>(2000);
   const [extraExpenditure, setExtraExpenditure] = useState<number>(300);
   const [activityLevel, setActivityLevel] = useState<string>('office');
-  const [projectionType, setProjectionType] = useState<'weekly' | 'monthly' | null>(null);
+  const [projectionType, setProjectionType] = useState<'daily' | 'weekly' | 'monthly' | null>(null);
   const [showRangeDialog, setShowRangeDialog] = useState(false);
   const [showBfpDialog, setShowBfpDialog] = useState(false);
 
@@ -170,6 +170,7 @@ export default function App() {
   const energyBalance = dailyIntake - totalExpenditure;
   
   // Predict monthly weight change (7700 kcal ≈ 1kg fat)
+  const dailyWeightChange = parseFloat(((energyBalance || 0) / 7700).toFixed(3));
   const monthlyWeightChange = parseFloat(((energyBalance || 0) * 30 / 7700).toFixed(2));
 
   // Body Composition Estimates (Approximate)
@@ -213,8 +214,8 @@ export default function App() {
     let currentW = unitSystem === 'metric' ? weight : weightLbs * 0.453592;
     const h = unitSystem === 'metric' ? height : (heightFt * 12 + heightIn) * 2.54;
     
-    const iterations = projectionType === 'weekly' ? 4 : 6;
-    const daysPerStep = projectionType === 'weekly' ? 7 : 30;
+    const iterations = projectionType === 'daily' ? 7 : (projectionType === 'weekly' ? 4 : 6);
+    const daysPerStep = projectionType === 'daily' ? 1 : (projectionType === 'weekly' ? 7 : 30);
     
     for (let i = 1; i <= iterations; i++) {
       const days = i * daysPerStep;
@@ -228,7 +229,7 @@ export default function App() {
       date.setDate(now.getDate() + days);
       
       data.push({
-        label: projectionType === 'weekly' ? `第 ${i} 周` : `第 ${i} 个月`,
+        label: projectionType === 'daily' ? `第 ${i} 天` : (projectionType === 'weekly' ? `第 ${i} 周` : `第 ${i} 个月`),
         date: date.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' }),
         weight: unitSystem === 'metric' ? (projectedW || 0).toFixed(1) : ((projectedW / 0.453592) || 0).toFixed(1),
         bmi: (projectedBMI || 0).toFixed(1),
@@ -779,34 +780,53 @@ export default function App() {
                       <div className="flex-1 space-y-2">
                         <p className="text-neutral-600 text-sm leading-relaxed">
                           基于您目前的能量平衡（每日 {energyBalance > 0 ? '盈余' : '缺口'} {Math.abs(energyBalance)} kcal），
-                          您的体重预计会发生以下变化：
+                          您的体重预计平均每日{energyBalance > 0 ? '增加' : '减少'} <span className="font-bold text-neutral-900">{Math.abs(dailyWeightChange)} kg</span>。
                         </p>
-                        <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div className="grid grid-cols-3 gap-2 mt-4">
                           <button 
-                            onClick={() => setProjectionType('weekly')}
-                            className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 text-left hover:border-emerald-200 hover:bg-emerald-50/30 transition-all group"
+                            onClick={() => setProjectionType('daily')}
+                            className={cn(
+                              "p-2 rounded-xl border text-left transition-all group",
+                              projectionType === 'daily' ? "bg-emerald-50 border-emerald-200" : "bg-neutral-50 border-neutral-100 hover:border-emerald-200 hover:bg-emerald-50/30"
+                            )}
                           >
                             <div className="flex justify-between items-start">
-                              <div className="text-[10px] text-neutral-400 uppercase mb-1">每周变化</div>
+                              <div className="text-[9px] text-neutral-400 uppercase mb-1">每日变化</div>
                               <Calendar className="w-3 h-3 text-neutral-300 group-hover:text-emerald-400" />
                             </div>
-                            <div className={cn("text-xl font-bold", energyBalance > 0 ? "text-rose-500" : "text-emerald-500")}>
+                            <div className={cn("text-base font-bold", energyBalance > 0 ? "text-rose-500" : "text-emerald-500")}>
+                              {energyBalance > 0 ? '+' : ''}{dailyWeightChange} kg
+                            </div>
+                          </button>
+                          <button 
+                            onClick={() => setProjectionType('weekly')}
+                            className={cn(
+                              "p-2 rounded-xl border text-left transition-all group",
+                              projectionType === 'weekly' ? "bg-emerald-50 border-emerald-200" : "bg-neutral-50 border-neutral-100 hover:border-emerald-200 hover:bg-emerald-50/30"
+                            )}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="text-[9px] text-neutral-400 uppercase mb-1">每周变化</div>
+                              <Calendar className="w-3 h-3 text-neutral-300 group-hover:text-emerald-400" />
+                            </div>
+                            <div className={cn("text-base font-bold", energyBalance > 0 ? "text-rose-500" : "text-emerald-500")}>
                               {energyBalance > 0 ? '+' : ''}{(((energyBalance || 0) * 7) / 7700).toFixed(2)} kg
                             </div>
-                            <div className="text-[9px] text-neutral-400 mt-1">点击查看详情</div>
                           </button>
                           <button 
                             onClick={() => setProjectionType('monthly')}
-                            className="p-3 bg-neutral-50 rounded-xl border border-neutral-100 text-left hover:border-emerald-200 hover:bg-emerald-50/30 transition-all group"
+                            className={cn(
+                              "p-2 rounded-xl border text-left transition-all group",
+                              projectionType === 'monthly' ? "bg-emerald-50 border-emerald-200" : "bg-neutral-50 border-neutral-100 hover:border-emerald-200 hover:bg-emerald-50/30"
+                            )}
                           >
                             <div className="flex justify-between items-start">
-                              <div className="text-[10px] text-neutral-400 uppercase mb-1">每月变化</div>
+                              <div className="text-[9px] text-neutral-400 uppercase mb-1">每月变化</div>
                               <Calendar className="w-3 h-3 text-neutral-300 group-hover:text-emerald-400" />
                             </div>
-                            <div className={cn("text-xl font-bold", energyBalance > 0 ? "text-rose-500" : "text-emerald-500")}>
+                            <div className={cn("text-base font-bold", energyBalance > 0 ? "text-rose-500" : "text-emerald-500")}>
                               {energyBalance > 0 ? '+' : ''}{monthlyWeightChange} kg
                             </div>
-                            <div className="text-[9px] text-neutral-400 mt-1">点击查看详情</div>
                           </button>
                         </div>
                       </div>
@@ -816,8 +836,14 @@ export default function App() {
                           energyBalance > 0 ? "text-rose-400" : "text-emerald-400"
                         )} style={{ transform: `rotate(${Math.min(Math.abs(energyBalance) / 1000 * 180, 180)}deg)` }} />
                         <div className="text-center">
-                          <div className="text-2xl font-black">{Math.abs(monthlyWeightChange)}</div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-bold">kg / 月</div>
+                          <div className="text-2xl font-black">
+                            {projectionType === 'daily' ? Math.abs(dailyWeightChange) : 
+                             projectionType === 'weekly' ? Math.abs(parseFloat(((energyBalance || 0) * 7 / 7700).toFixed(2))) : 
+                             Math.abs(monthlyWeightChange)}
+                          </div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-bold text-center">
+                            kg / {projectionType === 'daily' ? '天' : projectionType === 'weekly' ? '周' : '月'}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -917,10 +943,14 @@ export default function App() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-emerald-500" />
-                {projectionType === 'weekly' ? '每周体重变化预测' : '每月体重变化预测'}
+                {projectionType === 'daily' ? '每日体重变化预测' : 
+                 projectionType === 'weekly' ? '每周体重变化预测' : 
+                 '每月体重变化预测'}
               </DialogTitle>
               <DialogDescription>
-                基于您当前的能量平衡状态，未来 {projectionType === 'weekly' ? '4 周' : '6 个月'} 的预测数据。
+                基于您当前的能量平衡状态，未来 {projectionType === 'daily' ? '7 天' : 
+                                              projectionType === 'weekly' ? '4 周' : 
+                                              '6 个月'} 的预测数据。
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
